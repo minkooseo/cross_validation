@@ -38,7 +38,7 @@ cv <- function(K,  # How many folds do you want?
   }, ...)
 }
 
-mean_score <- function(result) {
+mean_rmse <- function(result) {
   # RMSE from result.
   mean(unlist(lapply(result, function(x) { x$evaluation })))
 }
