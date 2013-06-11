@@ -21,22 +21,29 @@ cv <- function(K,  # How many folds do you want?
     cat('Fold #', i, '\n')
     sub_train <- data[folds$subsets[folds$which != i], ]
     sub_valid <- data[folds$subsets[folds$which == i], ]
+    cat('-- Preprocessing\n')
     time.preprocess <- system.time(
-      lst <- preprocessor(sub_train, sub_valid))
+      lst <- preprocessor(sub_train, sub_valid, ...))
+    print(time.preprocess)
     sub_train <- lst$train
     sub_valid <- lst$valid
     sub_preprocessed <- lst$preprocessed
     # TODO: return prediction accuracy for training as well.
+    cat('-- Modelling\n')
     time.modelling <- system.time(
-      m <- modeller(sub_train))
+      m <- modeller(sub_train, ...))
+    print(time.modelling)
+    cat('-- Prediction\n')
     time.prediction <- system.time(
-      p <- predictor(m, sub_preprocessed, sub_valid))
+      p <- predictor(m, sub_preprocessed, sub_valid, ...))
+    print(time.prediction)
+    cat('-- Evaluation\n')
     return(list(
       time.preprocess=time.preprocess, 
       time.modelling=time.modelling, 
       time.prediction=time.prediction,
-      evaluation=evaluator(p, sub_valid)))
-  }, ...)
+      evaluation=evaluator(p, sub_valid, ...)))
+  })
 }
 
 cv.demo.classification <- function() {
