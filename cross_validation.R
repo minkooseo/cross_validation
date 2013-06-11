@@ -1,9 +1,10 @@
 # Minimal but more intuitive to use cross validation tool.
 require(cvTools)
-require(plyr)
+require(foreach)
 
 # Function for cross validation.
 cv <- function(K,  # How many folds do you want?
+               R,  # Number of replications
                type,  # type of folds to be generated. 'random', 'consecutive', 'interleaved'.
                samp_size=1.0,  # What fraction of data to be used as validation.
                seed,  # Seed for random number generator.
@@ -16,34 +17,45 @@ cv <- function(K,  # How many folds do you want?
   set.seed(seed)
   data <- sample(data)
   data <- data[1:(NROW(data) * samp_size),]
-  folds <- cvFolds(NROW(data), K, R=1, type)
-  llply(1:K, function(i) {
-    cat('Fold #', i, '\n')
-    sub_train <- data[folds$subsets[folds$which != i], ]
-    sub_valid <- data[folds$subsets[folds$which == i], ]
-    cat('-- Preprocessing\n')
-    time.preprocess <- system.time(
-      lst <- preprocessor(sub_train, sub_valid, ...))
-    print(time.preprocess)
-    sub_train <- lst$train
-    sub_valid <- lst$valid
-    sub_preprocessed <- lst$preprocessed
-    # TODO: return prediction accuracy for training as well.
-    cat('-- Modelling\n')
-    time.modelling <- system.time(
-      m <- modeller(sub_train, ...))
-    print(time.modelling)
-    cat('-- Prediction\n')
-    time.prediction <- system.time(
-      p <- predictor(m, sub_preprocessed, sub_valid, ...))
-    print(time.prediction)
-    cat('-- Evaluation\n')
-    return(list(
-      time.preprocess=time.preprocess, 
-      time.modelling=time.modelling, 
-      time.prediction=time.prediction,
-      evaluation=evaluator(p, sub_valid, ...)))
-  })
+  if (type != 'random') {
+    warning(paste("Replication is not supported if type is not random. ",
+            "No replication was made."))
+    R=1
+  }
+  folds <- cvFolds(NROW(data), K, R, type)
+  foreach(r=1:R, .combine=c) %do% {
+    foreach(i=1:K) %do% {
+      cat('\nRepeat #', r, ' Fold #', i, '\n')
+      sub_train <- data[folds$subsets[folds$which != i, r], ]
+      sub_valid <- data[folds$subsets[folds$which == i, r], ]
+      cat('training:', NROW(sub_train), 'rows.\n')
+      cat('validation:', NROW(sub_valid), 'rows.\n')
+      cat('-- Preprocessing\n')
+      time.preprocess <- system.time(
+        lst <- preprocessor(sub_train, sub_valid, ...))
+      print(time.preprocess)
+      sub_train <- lst$train
+      sub_valid <- lst$valid
+      sub_preprocessed <- lst$preprocessed
+      # TODO: return prediction accuracy for training as well.
+      cat('-- Modelling\n')
+      time.modelling <- system.time(
+        m <- modeller(sub_train, ...))
+      print(time.modelling)
+      cat('-- Prediction\n')
+      time.prediction <- system.time(
+        p <- predictor(m, sub_preprocessed, sub_valid, ...))
+      print(time.prediction)
+      cat('-- Evaluation\n')
+      eval_result <- evaluator(p, sub_valid, ...)
+      print(eval_result)
+      return(list(
+        time.preprocess=time.preprocess, 
+        time.modelling=time.modelling, 
+        time.prediction=time.prediction,
+        evaluation=eval_result))
+    }
+  }
 }
 
 cv.demo.classification <- function() {
@@ -71,10 +83,10 @@ cv.demo.classification <- function() {
     return(sum(predicted == valid$Species) / NROW(valid))
   }
   
-  result <- cv(10, 'consecutive', 1.0, 1234, 
+  result <- cv(10, 3, 'consecutive', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
                iris)
-  cat('Result: ')
+  cat('Result: \n')
   print(result)
 }
 
@@ -108,9 +120,9 @@ cv.demo.regression <- function() {
     return(sum((valid$Sepal.Length - predicted)^2) / NROW(valid))
   }
   
-  result <- cv(10, 'consecutive', 1.0, 1234, 
+  result <- cv(10, 3, 'random', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
                iris)
-  cat('Result: ')
+  cat('Result: \n')
   print(result)
 }
