@@ -83,7 +83,7 @@ cv.demo.classification <- function() {
     return(sum(predicted == valid$Species) / NROW(valid))
   }
   
-  result <- cv(10, 3, 'consecutive', 1.0, 1234, 
+  result <- cv(10, 3, 'random', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
                iris)
   cat('Result: \n')
