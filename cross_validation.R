@@ -15,7 +15,7 @@ cv <- function(K,  # How many folds do you want?
                data, 
                ...) {
   set.seed(seed)
-  data <- sample(data)
+  data <- data[sample(1:NROW(data)), ]
   data <- data[1:(NROW(data) * samp_size),]
   if (type != 'random') {
     warning(paste("Replication is not supported if type is not random. ",
