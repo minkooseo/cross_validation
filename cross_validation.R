@@ -61,6 +61,7 @@ cv <- function(K,  # How many folds do you want?
 cv.demo.classification <- function() {
   # Example for predicting Species using Petal.Length.
   require(caret)
+  require(foreach)
   require(rpart)
   data(iris)
   
@@ -80,14 +81,17 @@ cv.demo.classification <- function() {
   }
   
   evaluator <- function(predicted, valid) {
-    return(sum(predicted == valid$Species) / NROW(valid))
+    return(confusionMatrix(predicted, valid$Species))
   }
   
   result <- cv(10, 3, 'random', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
-               iris)
-  cat('Result: \n')
-  print(result)
+               iris)  
+  eval_total <- foreach(r=result, .combine='+') %do% {
+    r$evaluation$table
+  }
+  cat('\n\nResult: \n')
+  print(prop.table(eval_total, margin=1))
 }
 
 
