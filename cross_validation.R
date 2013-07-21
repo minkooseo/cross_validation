@@ -2,6 +2,9 @@
 require(cvTools)
 require(foreach)
 
+# TODO: Stratified sampling is necessary so that minority class is not
+# undersampled.
+
 # Function for cross validation.
 cv <- function(K,  # How many folds do you want?
                R,  # Number of replications
@@ -12,7 +15,8 @@ cv <- function(K,  # How many folds do you want?
                modeller,
                predictor,
                evaluator,
-               data, 
+               data,
+               setting, # Algorithm parameter, e.g., number of trees.
                ...) {
   set.seed(seed)
   data <- data[sample(1:NROW(data)), ]
@@ -23,8 +27,8 @@ cv <- function(K,  # How many folds do you want?
     R=1
   }
   folds <- cvFolds(NROW(data), K, R, type)
-  foreach(r=1:R, .combine=c) %do% {
-    foreach(i=1:K) %do% {
+  foreach(r=1:R, .combine='c') %do% {
+    kfold_result <- foreach(i=1:K) %dopar% {
       cat('\nRepeat #', r, ' Fold #', i, '\n')
       sub_train <- data[folds$subsets[folds$which != i, r], ]
       sub_valid <- data[folds$subsets[folds$which == i, r], ]
@@ -32,7 +36,7 @@ cv <- function(K,  # How many folds do you want?
       cat('validation:', NROW(sub_valid), 'rows.\n')
       cat('-- Preprocessing\n')
       time.preprocess <- system.time(
-        lst <- preprocessor(sub_train, sub_valid, ...))
+        lst <- preprocessor(sub_train, sub_valid, setting, ...))
       print(time.preprocess)
       sub_train <- lst$train
       sub_valid <- lst$valid
@@ -40,14 +44,14 @@ cv <- function(K,  # How many folds do you want?
       # TODO: return prediction accuracy for training as well.
       cat('-- Modelling\n')
       time.modelling <- system.time(
-        m <- modeller(sub_train, ...))
+        m <- modeller(sub_train, setting, ...))
       print(time.modelling)
       cat('-- Prediction\n')
       time.prediction <- system.time(
-        p <- predictor(m, sub_preprocessed, sub_valid, ...))
+        p <- predictor(m, sub_preprocessed, sub_valid, setting, ...))
       print(time.prediction)
       cat('-- Evaluation\n')
-      eval_result <- evaluator(p, sub_valid, ...)
+      eval_result <- evaluator(p, sub_valid, setting, ...)
       print(eval_result)
       return(list(
         time.preprocess=time.preprocess, 
@@ -55,6 +59,7 @@ cv <- function(K,  # How many folds do you want?
         time.prediction=time.prediction,
         evaluation=eval_result))
     }
+    return(kfold_result)
   }
 }
 
@@ -62,31 +67,32 @@ cv.demo.classification <- function() {
   # Example for predicting Species using Petal.Length.
   require(caret)
   require(foreach)
-  require(rpart)
+  require(randomForest)
   data(iris)
   
-  preprocessor <- function(train, valid) {
+  preprocessor <- function(train, valid, setting) {
     preProcValues <- preProcess(train[, 1:4], method = c('center', 'scale'))
     train[, 1:4] <- predict(preProcValues, train[, 1:4])
     valid[, 1:4] <- predict(preProcValues, valid[, 1:4])
     return(list(train=train, valid=valid))
   }
   
-  modeller <- function(train) {
-    return(rpart(Species ~ Petal.Length, data=train))
+  modeller <- function(train, setting) {
+    return(randomForest(Species ~ Petal.Length, data=train,
+                        ntree=setting$ntree))
   }
   
-  predictor <- function(model, preprocessed, valid) {
+  predictor <- function(model, preprocessed, valid, setting) {
     return(predict(model, newdata=valid, type='class'))
   }
   
-  evaluator <- function(predicted, valid) {
+  evaluator <- function(predicted, valid, setting) {
     return(confusionMatrix(predicted, valid$Species))
   }
   
   result <- cv(10, 3, 'random', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
-               iris)  
+               iris, setting=list(ntree=100))  
   eval_total <- foreach(r=result, .combine='+') %do% {
     r$evaluation$table
   }
@@ -99,7 +105,7 @@ cv.demo.regression <- function() {
   # Example for predicting Sepal.Length from Sepal.Width
   data(iris)
   
-  preprocessor <- function(train, valid) {
+  preprocessor <- function(train, valid, setting) {
     sepal.length.mean <- mean(train$Sepal.Length)
     sepal.width.mean <- mean(train$Sepal.Width)
     
@@ -112,15 +118,15 @@ cv.demo.regression <- function() {
                 preprocessed=sepal.length.mean))
   }
   
-  modeller <- function(train) {
+  modeller <- function(train, setting) {
     return(lm(Sepal.Length ~ Sepal.Width, data=train))
   }
   
-  predictor <- function(model, preprocessed, valid) {
+  predictor <- function(model, preprocessed, valid, setting) {
     return(predict(model, newdata=valid) + preprocessed)
   }
   
-  evaluator <- function(predicted, valid) {
+  evaluator <- function(predicted, valid, setting) {
     return(sum((valid$Sepal.Length - predicted)^2) / NROW(valid))
   }
   
