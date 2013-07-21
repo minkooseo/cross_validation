@@ -132,7 +132,7 @@ cv.demo.regression <- function() {
   
   result <- cv(10, 3, 'random', 1.0, 1234, 
                preprocessor, modeller, predictor, evaluator, 
-               iris)
+               iris, NULL)
   cat('Result: \n')
   print(result)
 }
